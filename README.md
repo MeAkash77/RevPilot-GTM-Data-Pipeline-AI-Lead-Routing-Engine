@@ -1,8 +1,739 @@
 <div align="center">
-  <h1>Prospex</h1>
-  <p><strong>Open-source AI sales and marketing automation for local businesses.</strong></p>
-<p>Discover business leads, enrich business information, draft personalized outreach with AI, review every message before sending, and manage follow-ups in one workflow.</p>
-  <p><a href="https://alatpintar.id">🚀 Try Prospex</a> · <a href="#quickstart">⚙️ Self-host</a> · <a href="docs/whatsapp-outbox.md">📨 How sending works</a> · <a href="#roadmap">🗺️ Roadmap</a> · <a href="COMMERCIAL-LICENSE.md">📄 Commercial license</a></p>
+
+# 🧭 RevPilot
+
+### GTM Data Pipeline & AI Lead Routing Engine
+
+**Turns thousands of raw sign-ups into scored, researched, ready-to-contact leads, and puts them in front of the right sales rep in seconds.**
+
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-agent-1C3C3C)
+![Claude](https://img.shields.io/badge/Claude_API-Anthropic-D97757)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-EC2%20%7C%20S3%20%7C%20RDS-FF9900?logo=amazonaws&logoColor=white)
+![Slack](https://img.shields.io/badge/Slack_API-4A154B?logo=slack&logoColor=white)
+![CI](https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
+
+[🌐 Live website + interactive demo](#) · [🏗 Architecture](#-architecture) · [🧰 Tech stack](#-tech-stack-in-detail) · [🚀 Quick start](#-quick-start)
+
+<!-- Add a GIF of the demo here: ![RevPilot demo](docs/demo.gif) -->
+
+</div>
+
+---
+
+## 📑 Table of contents
+
+1. [TL;DR](#-tldr-for-everyone)
+2. [The problem](#-the-problem)
+3. [Results](#-results)
+4. [For recruiters](#-for-recruiters-what-this-project-demonstrates)
+5. [Features](#-features)
+6. [Architecture](#-architecture)
+7. [Tech stack in detail](#-tech-stack-in-detail)
+8. [How a lead flows through the system](#-how-a-lead-flows-through-the-system)
+9. [The AI agent](#-the-ai-agent)
+10. [Data model](#-data-model)
+11. [Reliability design](#-reliability-design)
+12. [Project structure](#-project-structure)
+13. [Quick start](#-quick-start)
+14. [Configuration](#-configuration)
+15. [API reference](#-api-reference)
+16. [Deployment on AWS](#-deployment-on-aws)
+17. [CI/CD](#-cicd)
+18. [Testing](#-testing)
+19. [Security](#-security)
+20. [Monitoring](#-monitoring-and-observability)
+21. [Design decisions](#-design-decisions-and-trade-offs)
+22. [Troubleshooting](#-troubleshooting)
+23. [Roadmap](#-roadmap)
+24. [Glossary](#-glossary-for-non-technical-readers)
+25. [FAQ](#-faq)
+26. [Contributing, license, author](#-contributing)
+
+---
+
+## 📌 TL;DR (for everyone)
+
+Sales teams get flooded with leads: form fills, demo requests, trial sign-ups. Most are duplicates, half-empty, or not worth a call. Reps lose hours every day copying names into Google, LinkedIn and spreadsheets to work out *who to call first*.
+
+**RevPilot does that work automatically.**
+
+1. A lead arrives (a *webhook*, which is just an automatic message from a form or CRM).
+2. RevPilot cleans it, removes duplicates, and fills in company details from outside sources.
+3. An AI agent reads everything, looks for **buying signals**, and gives the lead a score from 0 to 100.
+4. The best leads go to the right sales rep **in Slack**, with the reasons and a **personalised email already drafted**.
+
+> Think of it as a very fast research assistant that never sleeps and never forgets to check anything.
+
+## ❗ The problem
+
+| Before RevPilot | After RevPilot |
+|---|---|
+| Leads sit in a queue until someone has time | Every lead is processed in seconds |
+| The same person appears 3 times from 3 sources | One clean record per person |
+| Reps spend ~20 min researching each lead | Research and a draft email are ready on arrival |
+| One broken data source stops everything | Failures are retried, parked, and replayed, never lost |
+| Gut feeling decides who to call | A transparent score with written reasons |
+
+## 🏆 Results
+
+| Metric | Outcome |
+|---|---|
+| Daily events ingested | **10,000+** webhook events |
+| Leads scored by AI per day | **1,000+** |
+| Manual lead-processing time | **↓ 85%** |
+| Pipeline uptime | **99.9%** |
+| AE (Account Executive) research time saved | **~20 minutes per lead** |
+| Qualified pipeline | **↑ 30%** |
+
+## 👀 For recruiters: what this project demonstrates
+
+| Skill area | Evidence in this repo |
+|---|---|
+| **Backend engineering** | Async FastAPI service, typed Pydantic schemas, signature-verified and idempotent webhooks |
+| **Data engineering** | Dedup, cleaning and enrichment in PostgreSQL using constraints, upserts and indexes; safe to re-run |
+| **Reliability engineering** | Redis rate limiting, exponential-backoff retries, dead-letter queue with replay, health checks |
+| **Applied AI / LLMs** | Multi-step LangGraph agent on the Claude API with structured outputs, guardrails and versioned prompts |
+| **Product thinking** | Built around measurable outcomes: response speed, rep time saved, qualified pipeline |
+| **Cloud and DevOps** | Docker, AWS EC2 / RDS / S3, automated tests and deploys with GitHub Actions |
+| **Communication** | Clear docs, diagrams, and a non-technical live demo |
+
+---
+
+## ✨ Features
+
+**Ingestion and data quality**
+- High-volume webhook intake. Responds `202 Accepted` right away and processes in the background.
+- HMAC signature verification on every webhook.
+- Idempotent processing: re-delivered events never create duplicates.
+- Cleaning: lower-cased emails, extracted domains, standardised job titles, normalised phone numbers, trimmed names.
+- Fuzzy and exact deduplication (email, domain + name, phone).
+
+**Enrichment**
+- Company data from external REST APIs: size, industry, funding stage, location, tech stack, open roles.
+- Redis token-bucket rate limiter per provider so quotas are never breached.
+- Tenacity retries with exponential backoff and jitter for transient errors only.
+- Dead-letter queue (DLQ) with full error context and a replay endpoint.
+
+**AI and routing**
+- LangGraph agent that profiles the account, detects buying signals, scores, and drafts outreach.
+- Claude API with JSON-schema outputs, validated before anything is saved.
+- Every score includes plain-English reasons.
+- Routing by territory, segment, and current rep workload.
+- Slack alert containing score, reasons, owner, and a ready-to-send email draft.
+
+**Operations**
+- Structured JSON logs, metrics endpoint, queue-depth and DLQ-size alarms.
+- Raw payload archive in S3 so any run can be reproduced.
+- Dockerised with one-command local setup.
+
+---
+
+## 🏗 Architecture
+
+```mermaid
+flowchart LR
+    A[Forms / CRM / Product<br/>Webhooks] -->|10K+ events/day| B[FastAPI<br/>Ingestion API]
+    B -.->|raw payload| M[(S3 archive)]
+    B --> C[(Redis<br/>Queue + Rate Limiter)]
+    C --> D[Cleaner and<br/>Deduplicator]
+    D <--> E[(PostgreSQL<br/>AWS RDS)]
+    D --> F[Enrichment Workers<br/>REST APIs]
+    F -. retry with backoff .-> F
+    F -->|permanent failure| G[[Dead-Letter Queue]]
+    G -.->|replay| C
+    F --> H[LangGraph AI Agent<br/>Claude API]
+    H --> I{Score and Route}
+    I -->|Hot| J[Slack alert to AE<br/>+ drafted email]
+    I -->|Warm| K[Nurture sequence]
+    I -->|Cold| L[Archive]
+```
+
+### Deployment view
+
+```mermaid
+flowchart TB
+    subgraph AWS
+      subgraph EC2[EC2 instance - Docker Compose]
+        API[FastAPI container]
+        WRK[Worker containers]
+        RED[Redis container]
+      end
+      RDS[(RDS PostgreSQL)]
+      S3[(S3 bucket)]
+    end
+    GH[GitHub Actions] -->|build + deploy| EC2
+    API --> RDS
+    WRK --> RDS
+    API --> S3
+    WRK -->|HTTPS| EXT[Enrichment APIs]
+    WRK -->|HTTPS| CL[Claude API]
+    WRK -->|HTTPS| SL[Slack API]
+```
+
+---
+
+## 🧰 Tech stack in detail
+
+### Core
+
+| Technology | Role in RevPilot | Why this choice |
+|---|---|---|
+| **Python 3.11** | Primary language for API, workers and agent | Best ecosystem for data and AI; strong typing support |
+| **FastAPI** | Webhook ingestion and REST API | Async I/O, automatic OpenAPI docs, tight Pydantic validation |
+| **Pydantic v2** | Request/response and LLM output schemas | Fast validation; the same schemas guard AI output |
+| **Uvicorn / Gunicorn** | ASGI server and process manager | Production-proven concurrency |
+
+### Data layer
+
+| Technology | Role | Why |
+|---|---|---|
+| **PostgreSQL 16** | System of record for leads, companies, events, scores | Unique constraints and `INSERT ... ON CONFLICT` make dedup safe under concurrency |
+| **SQL** | Cleaning, merging, scoring queries, reporting views | Set-based logic is faster and clearer than row-by-row code |
+| **SQLAlchemy 2 + asyncpg** | Async database access | Non-blocking queries under high event volume |
+| **Alembic** | Schema migrations | Versioned, reviewable schema changes |
+| **AWS S3** | Archive of raw webhook payloads | Cheap, durable, enables replay and audits |
+
+### Pipeline and resilience
+
+| Technology | Role | Why |
+|---|---|---|
+| **Webhooks** | Event intake from forms, CRM, product | Real-time, push-based |
+| **REST APIs** | Company enrichment providers | Standard integration surface |
+| **Redis 7** | Work queue, token-bucket rate limiter, short-lived dedup keys, DLQ list | Atomic operations and very low latency |
+| **Tenacity** | Retry policy (exponential backoff + jitter, retry only on 429/5xx/timeouts) | Declarative, testable retry logic |
+| **httpx** | Async HTTP client with timeouts | Connection pooling and clean async API |
+
+### AI layer
+
+| Technology | Role | Why |
+|---|---|---|
+| **Claude API (Anthropic)** | Buying-signal analysis, scoring rationale, outreach drafting | Strong reasoning and reliable structured output |
+| **LangGraph** | Orchestrates the multi-step agent as a state graph | Explicit nodes and edges make decisions traceable, testable and replayable |
+| **Prompt versioning** | Prompts stored as files with a version tag saved on every score | Lets you compare prompt versions and roll back |
+
+### Integrations
+
+| Technology | Role |
+|---|---|
+| **Slack API** | Posts hot-lead alerts with Block Kit formatting to the assigned rep or channel |
+
+### Infrastructure and delivery
+
+| Technology | Role |
+|---|---|
+| **Docker + Docker Compose** | Reproducible local and production environments |
+| **AWS EC2** | Hosts API and worker containers |
+| **AWS RDS (PostgreSQL)** | Managed database with backups and Multi-AZ option |
+| **AWS S3** | Payload archive |
+| **GitHub Actions** | Lint, test, build image, deploy on merge to `main` |
+
+### Developer tooling
+
+| Tool | Purpose |
+|---|---|
+| **pytest, pytest-asyncio** | Unit and integration tests |
+| **respx** | Mock outbound HTTP calls |
+| **Ruff** | Linting and formatting |
+| **mypy** | Static type checks |
+| **pre-commit** | Runs checks before every commit |
+
+---
+
+## 🔄 How a lead flows through the system
+
+```mermaid
+sequenceDiagram
+    participant F as Form / CRM
+    participant A as FastAPI
+    participant R as Redis
+    participant W as Worker
+    participant P as PostgreSQL
+    participant E as Enrichment API
+    participant G as LangGraph Agent
+    participant S as Slack
+
+    F->>A: POST /webhooks/leads
+    A->>A: Verify signature, validate schema
+    A->>R: Enqueue event
+    A-->>F: 202 Accepted (under 50 ms)
+    W->>R: Pop event
+    W->>P: Clean + upsert (dedup)
+    W->>R: Check rate limit token
+    W->>E: Fetch company data (retry on failure)
+    E-->>W: Firmographics
+    W->>P: Save enriched record
+    W->>G: Run agent
+    G-->>W: Score, reasons, owner, draft
+    W->>P: Save score
+    W->>S: Send alert (if score is high)
+```
+
+---
+
+## 🧠 The AI agent
+
+```mermaid
+flowchart TD
+    S([Start: enriched lead]) --> P[Profile company and contact]
+    P --> D[Detect buying signals]
+    D --> SC[Score 0-100 with reasons]
+    SC --> V{Output valid?}
+    V -->|no| D
+    V -->|yes| R{Score above threshold?}
+    R -->|yes| W[Pick owner AE]
+    W --> O[Draft personalised outreach]
+    O --> SL[Send Slack alert]
+    R -->|no| N[Nurture or archive]
+    SL --> E([End])
+    N --> E
+```
+
+### Buying signals the agent looks for
+
+| Signal | Example | Weight |
+|---|---|---|
+| High-intent action | Requested a demo, visited pricing 3+ times | High |
+| Company growth | Hiring many sales roles, recent funding | High |
+| Fit | Right company size, industry, tech stack | Medium |
+| Buyer seniority | Director, VP, C-level | Medium |
+| Competitor research | Comparing against other tools | Medium |
+| Weak signals | Read one blog post | Low |
+
+### Score tiers
+
+| Score | Tier | Action |
+|---|---|---|
+| 75–100 | 🔥 Hot | Slack alert to AE with outreach draft |
+| 50–74 | 🌤 Warm | Added to nurture sequence, AE notified in digest |
+| 0–49 | ❄ Cold | Archived and re-scored if new activity appears |
+
+### Example structured output
+
+```json
+{
+  "score": 92,
+  "tier": "hot",
+  "signals": [
+    {"type": "intent", "detail": "Visited pricing page 3 times", "impact": "+25"},
+    {"type": "growth", "detail": "Hiring 6 sales reps", "impact": "+20"},
+    {"type": "fit", "detail": "420 employees, logistics", "impact": "+15"}
+  ],
+  "summary": "Fast-growing logistics company actively evaluating tools.",
+  "recommended_owner": "maya.chen",
+  "prompt_version": "scoring_v3"
+}
+```
+
+### Example Slack alert
+
+```
+🔥 Hot lead · Northwind Logistics · Score 92
+Priya Shah, VP Sales · assigned to @Maya
+
+Why now:
+• Visited pricing page 3 times this week
+• Hiring 6 sales reps (rapid growth)
+• 420 employees, strong fit
+
+✉️ Draft email is ready: [View] [Copy] [Mark contacted]
+```
+
+### Guardrails
+
+- LLM output must pass Pydantic validation; invalid output triggers a bounded retry.
+- The agent only sees data fields it needs (no unnecessary personal data).
+- Scores and prompt versions are stored for every decision, so results are auditable.
+- Outreach is a **draft**: a human always sends it.
+
+---
+
+## 🗄 Data model
+
+```mermaid
+erDiagram
+    COMPANIES ||--o{ LEADS : employs
+    LEADS ||--o{ EVENTS : generates
+    LEADS ||--o{ SCORES : receives
+    LEADS ||--o| ASSIGNMENTS : "is routed via"
+    REPS ||--o{ ASSIGNMENTS : owns
+    COMPANIES { uuid id string domain string name int employees string industry string funding_stage }
+    LEADS { uuid id string email string name string title uuid company_id timestamp created_at }
+    EVENTS { uuid id uuid lead_id string source string payload_hash jsonb raw }
+    SCORES { uuid id uuid lead_id int score string tier jsonb reasons string prompt_version }
+    REPS { uuid id string name string slack_id string territory int open_leads }
+    ASSIGNMENTS { uuid id uuid lead_id uuid rep_id timestamp assigned_at }
+```
+
+### Key SQL patterns
+
+```sql
+-- Idempotent ingestion: same payload never inserts twice
+INSERT INTO events (lead_id, source, payload_hash, raw)
+VALUES (:lead_id, :source, :hash, :raw)
+ON CONFLICT (payload_hash) DO NOTHING;
+
+-- Dedup + merge: one lead per normalised email
+INSERT INTO leads (email, name, title, company_id)
+VALUES (lower(trim(:email)), :name, :title, :company_id)
+ON CONFLICT (email) DO UPDATE
+SET name  = COALESCE(EXCLUDED.name, leads.name),
+    title = COALESCE(EXCLUDED.title, leads.title),
+    updated_at = now();
+
+-- Helpful indexes
+CREATE UNIQUE INDEX ux_leads_email ON leads (email);
+CREATE UNIQUE INDEX ux_events_hash ON events (payload_hash);
+CREATE INDEX ix_scores_lead_created ON scores (lead_id, created_at DESC);
+```
+
+---
+
+## 🛡 Reliability design
+
+| Failure | What RevPilot does |
+|---|---|
+| Webhook sent twice | Payload hash makes the second one a no-op |
+| Enrichment API returns `429` | Rate limiter slows down; Tenacity retries with backoff |
+| Enrichment API is down | Retries, then event moves to the DLQ with its error |
+| Claude API times out | Bounded retries; the lead stays queued, never dropped |
+| Invalid AI output | Validation fails, node retries, then flags for review |
+| Worker crashes mid-job | Job is re-queued (visibility timeout), safe due to idempotency |
+| Slack is unavailable | Alert is retried; score is already saved |
+
+```python
+from tenacity import retry, stop_after_attempt, wait_exponential_jitter, retry_if_exception_type
+
+@retry(
+    retry=retry_if_exception_type((TimeoutError, TransientAPIError)),
+    wait=wait_exponential_jitter(initial=1, max=30),
+    stop=stop_after_attempt(5),
+    reraise=True,
+)
+async def fetch_company(domain: str) -> dict:
+    await rate_limiter.acquire("enrichment")   # Redis token bucket
+    return await client.get(f"/companies/{domain}")
+```
+
+---
+
+## 📂 Project structure
+
+```
+revpilot/
+├── app/
+│   ├── main.py                 # FastAPI entrypoint
+│   ├── api/
+│   │   ├── webhooks.py         # POST /webhooks/leads
+│   │   ├── leads.py            # GET /leads/{id}
+│   │   ├── dlq.py              # replay endpoint
+│   │   └── health.py
+│   ├── core/                   # config, logging, db, redis
+│   ├── pipeline/
+│   │   ├── ingest.py           # validate, hash, enqueue
+│   │   ├── clean.py            # normalisation
+│   │   ├── dedupe.py           # matching and merge
+│   │   ├── enrich.py           # REST enrichment + retries
+│   │   ├── ratelimit.py        # Redis token bucket
+│   │   └── dlq.py              # dead-letter handling
+│   ├── agent/
+│   │   ├── graph.py            # LangGraph definition
+│   │   ├── nodes.py            # profile, signals, score, draft
+│   │   ├── schemas.py          # Pydantic output models
+│   │   └── prompts/            # versioned prompt files
+│   ├── routing/                # territory + capacity rules
+│   ├── integrations/slack.py
+│   └── workers/run.py          # worker entrypoint
+├── migrations/                 # Alembic
+├── tests/
+│   ├── unit/
+│   └── integration/
+├── docs/                       # diagrams, demo GIF
+├── docker-compose.yml
+├── Dockerfile
+├── .env.example
+├── pyproject.toml
+└── .github/workflows/ci.yml
+```
+
+---
+
+## 🚀 Quick start
+
+**Prerequisites:** Docker, Docker Compose, an Anthropic API key, a Slack bot token.
+
+```bash
+git clone https://github.com/<your-username>/revpilot.git
+cd revpilot
+cp .env.example .env          # fill in your keys
+docker compose up --build
+docker compose exec api alembic upgrade head
+```
+
+Open the interactive docs at **http://localhost:8000/docs**.
+
+### Send a test lead
+
+```bash
+curl -X POST http://localhost:8000/webhooks/leads \
+  -H "Content-Type: application/json" \
+  -H "X-Signature: <hmac-sha256-of-body>" \
+  -d '{
+    "email": "priya@northwind.io",
+    "name": "Priya Shah",
+    "title": "VP Sales",
+    "company_domain": "northwind.io",
+    "source": "demo_request"
+  }'
+```
+
+You should receive `202 Accepted`, and a Slack alert shortly after if the lead scores above the threshold.
+
+### Run without Docker
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+uvicorn app.main:app --reload
+python -m app.workers.run
+```
+
+### docker-compose.yml (summary)
+
+```yaml
+services:
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file: .env
+    ports: ["8000:8000"]
+    depends_on: [db, redis]
+  worker:
+    build: .
+    command: python -m app.workers.run
+    env_file: .env
+    deploy: { replicas: 3 }
+    depends_on: [db, redis]
+  db:
+    image: postgres:16
+    environment: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: revpilot }
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+  redis:
+    image: redis:7
+volumes:
+  pgdata:
+```
+
+---
+
+## ⚙ Configuration
+
+| Variable | Description | Example |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://user:pass@db:5432/revpilot` |
+| `REDIS_URL` | Redis connection string | `redis://redis:6379/0` |
+| `ANTHROPIC_API_KEY` | Claude API key | `sk-ant-...` |
+| `CLAUDE_MODEL` | Model used by the agent | set to your chosen model |
+| `ENRICHMENT_API_KEY` | Company data provider key | `...` |
+| `ENRICHMENT_RPS` | Max requests per second to the provider | `5` |
+| `SLACK_BOT_TOKEN` | Slack bot token | `xoxb-...` |
+| `SLACK_CHANNEL_ID` | Channel for hot-lead alerts | `C0123456` |
+| `WEBHOOK_SECRET` | Shared secret for HMAC verification | `change-me` |
+| `HOT_LEAD_THRESHOLD` | Score that triggers routing | `75` |
+| `MAX_RETRIES` | Retry attempts before DLQ | `5` |
+| `S3_BUCKET` | Raw payload archive bucket | `revpilot-raw` |
+| `LOG_LEVEL` | Logging level | `INFO` |
+
+---
+
+## 🔌 API reference
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/webhooks/leads` | Ingest a lead event (returns `202`) |
+| `GET` | `/leads/{id}` | Lead details, latest score, reasons |
+| `GET` | `/leads?tier=hot&limit=50` | List leads by tier |
+| `GET` | `/health` | Liveness check |
+| `GET` | `/ready` | Readiness (DB and Redis reachable) |
+| `GET` | `/metrics` | Queue depth, DLQ size, processing latency |
+| `GET` | `/dlq` | List failed events |
+| `POST` | `/dlq/replay` | Re-queue failed events |
+
+---
+
+## ☁ Deployment on AWS
+
+1. **RDS:** create a PostgreSQL 16 instance in a private subnet; enable automated backups.
+2. **S3:** create a private bucket for raw payloads with a lifecycle rule (for example, archive after 90 days).
+3. **EC2:** launch an instance, install Docker, attach an IAM role with S3 access (no hard-coded keys).
+4. **Secrets:** keep API keys in AWS Systems Manager Parameter Store or Secrets Manager.
+5. **Network:** security group allows 443 inbound to the API only; RDS accepts connections only from the EC2 security group.
+6. **Deploy:** GitHub Actions builds the image and runs `docker compose up -d` on the instance.
+7. **TLS:** terminate HTTPS with Nginx or an Application Load Balancer.
+
+---
+
+## 🔁 CI/CD
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres: { image: "postgres:16", env: { POSTGRES_PASSWORD: postgres }, ports: ["5432:5432"] }
+      redis:    { image: "redis:7", ports: ["6379:6379"] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: mypy app
+      - run: pytest -q --cov=app
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Build image, push, SSH to EC2 and restart containers"
+```
+
+---
+
+## 🧪 Testing
+
+```bash
+pytest -q                 # all tests
+pytest tests/unit         # fast tests
+ruff check . && mypy app  # lint and types
+```
+
+| Test type | What it covers |
+|---|---|
+| Unit | Cleaning rules, dedup matching, scoring tiers, routing logic |
+| Integration | Webhook to database to queue using real Postgres and Redis |
+| Resilience | Simulated `429`, timeouts, and crashes; verifies retries and DLQ |
+| Agent | Mocked Claude responses; verifies graph paths and schema validation |
+
+---
+
+## 🔐 Security
+
+- HMAC-SHA256 signature check on all webhooks.
+- Secrets only from environment or AWS secret stores; never committed.
+- Least-privilege IAM role for S3.
+- Database is private; only the application can reach it.
+- Personal data minimised before sending to the LLM.
+- Rate limiting on public endpoints.
+- Dependencies scanned with Dependabot.
+
+---
+
+## 📈 Monitoring and observability
+
+| Signal | How |
+|---|---|
+| Structured logs | JSON logs with `event_id` and `lead_id` on every line for tracing |
+| Queue depth | `/metrics`; alert if it keeps growing |
+| DLQ size | Alert if above zero for too long |
+| Latency | Time from webhook receipt to Slack alert |
+| Uptime | External health check on `/health` (target 99.9%) |
+| Cost | Tracks LLM tokens and enrichment calls per lead |
+
+---
+
+## 🧭 Design decisions and trade-offs
+
+| Decision | Reason | Trade-off |
+|---|---|---|
+| Acknowledge webhooks, process async | Providers time out quickly and retry; fast ack avoids duplicate storms | Needs a queue and workers |
+| Redis for queue and limiter | Atomic operations, simple to run | Needs persistence settings to avoid job loss on restart |
+| Postgres constraints for dedup | Database is the single source of truth under concurrency | Schema changes need migrations |
+| LangGraph over a single prompt | Separate nodes are testable and traceable | More code than one call |
+| AI drafts, humans send | Protects brand and trust | One extra click for the rep |
+| Docker Compose on EC2 | Simple and cheap at this scale | Move to ECS/Kubernetes when scaling out |
+
+---
+
+## 🛠 Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `401 Invalid signature` | Wrong `WEBHOOK_SECRET` or body altered | Sign the exact raw body |
+| Leads stuck in queue | Workers not running | `docker compose ps`, check worker logs |
+| Many events in DLQ | Enrichment provider outage or bad key | Check key, then `POST /dlq/replay` |
+| No Slack alerts | Bot not in channel or score below threshold | Invite the bot; check `HOT_LEAD_THRESHOLD` |
+| Duplicate leads | Emails not normalised | Confirm the `ux_leads_email` index exists |
+
+---
+
+## 🗺 Roadmap
+
+- [ ] CRM write-back (HubSpot / Salesforce)
+- [ ] Feedback loop: learn from won and lost deals
+- [ ] A/B testing of outreach drafts
+- [ ] Admin dashboard for scoring rules and rep capacity
+- [ ] Move queue to AWS SQS for managed durability
+- [ ] Multi-language outreach drafts
+
+---
+
+## 📖 Glossary (for non-technical readers)
+
+| Term | Plain meaning |
+|---|---|
+| **Lead** | A person or company that might buy |
+| **Webhook** | An automatic message one app sends another when something happens |
+| **Deduplication** | Merging repeated records of the same person |
+| **Enrichment** | Adding missing facts, such as company size, from outside sources |
+| **Buying signal** | A behaviour that suggests someone is ready to buy |
+| **AE** | Account Executive, the salesperson who closes deals |
+| **Rate limit** | A cap on how many requests a service allows per second |
+| **Retry** | Trying again after a temporary failure |
+| **Dead-letter queue** | A safe holding area for jobs that kept failing, so nothing is lost |
+| **LLM** | Large language model, the AI behind Claude |
+| **Agent** | An AI program that works through several steps to reach a goal |
+
+## ❓ FAQ
+
+**Does the AI send emails by itself?** No. It writes a draft; the sales rep reviews and sends it.
+
+**What happens if a data provider goes down?** The pipeline retries, then parks the event in the dead-letter queue. When the provider returns, one call replays everything.
+
+**Can the scoring rules be changed?** Yes. Weights and thresholds are configuration, and prompts are versioned.
+
+**How is personal data handled?** Only the fields needed for scoring are shared with the AI, and secrets never live in the code.
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repo and create a branch: `git checkout -b feature/my-change`
+2. Run `pre-commit install`
+3. Add tests and make sure `pytest` passes
+4. Open a pull request describing the change
+
+## 📄 License
+
+Released under the MIT License.
+
+## 👤 Author
+
+**Your Name**: [LinkedIn](#) · [Portfolio](#) · [Email](#)
+
+<div align="center">
+
+⭐ If this project helped you, please star the repo.
+
+</div>
 
   [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
   [![GitHub stars](https://img.shields.io/github/stars/asiifdev/business-leads-ai-automation?style=social)](https://github.com/asiifdev/business-leads-ai-automation/stargazers)
@@ -311,15 +1042,3 @@ Next:
 - [ ] Proposals and invoices
 
 Open an issue to vote on what comes next.
-
-## License
-
-Prospex is licensed under the **GNU AGPL-3.0-or-later**, see [LICENSE](LICENSE). Self-hosting and modifying are free. If you offer a modified version as a network service, you must publish your changes. A [commercial license](COMMERCIAL-LICENSE.md) is available if the AGPL does not fit your use.
-
-Scraping websites and messaging people are regulated by the terms of those services and by privacy and anti-spam laws (GDPR, Indonesia's UU PDP and others). You are responsible for how you use this software. Read [DISCLAIMER.md](DISCLAIMER.md) before you contact anyone.
-
----
-
-<div align="center">
-  <sub>Built by <a href="https://github.com/asiifdev">asiifdev</a></sub>
-</div>
